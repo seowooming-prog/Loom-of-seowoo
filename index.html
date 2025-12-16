@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MOBILE OFFICE – TEXTILE RECORDING LOOM</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:Menlo,Monaco,Consolas,"Courier New",monospace;}
+    body{background:#000;color:#fff;overflow:hidden;}
+
+    .hud{
+      position:fixed;top:18px;left:18px;right:18px;
+      padding:10px 12px;border:2px solid #000;background:#fff;z-index:20;
+      display:flex;align-items:center;gap:10px;color:#000;
+    }
+    .hud-left{display:flex;flex-direction:column;gap:4px;min-width:260px;}
+    .hud-title{font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+    .hud-status{font-size:9px;text-transform:uppercase;opacity:.85;}
+    .hud-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
+    #syncBtn,#exportBtn{
+      font-size:9px;padding:6px 12px;background:#fff;color:#000;border:1px solid #000;
+      text-transform:uppercase;letter-spacing:.12em;cursor:pointer;
+    }
+    #syncBtn:hover,#exportBtn:hover{background:#000;color:#fff;border-color:#000;}
+    #exportBtn:disabled{opacity:.35;cursor:not-allowed;}
+    #fileInput{display:none;}
+
+    .stage{
+      position:fixed;left:18px;right:18px;bottom:18px;top:76px;
+      border:2px solid rgba(255,255,255,0.75);
+      background:#000;
+      overflow:hidden;
+    }
+    canvas{width:100%;height:100%;display:block;}
+
+    /* INTRO LOOM */
+    .intro{
+      position:absolute;inset:0;
+      display:flex;align-items:center;justify-content:center;
+      pointer-events:none;
+      opacity:0;
+      transition:opacity .25s ease;
+      z-index:5;
+    }
+    .intro.show{opacity:1;}
+    .intro pre{
+      white-space:pre;
+      font-size:11px;
+      line-height:1.05;
+      color:rgba(255,255,255,0.95);
+      text-shadow:0 0 2px rgba(0,0,0,0.95), 0 0 18px rgba(255,255,255,0.25);
+      filter: drop-shadow(0 0 10px rgba(255,255,255,0.12));
+      transform: translateY(-10px);
+    }
+
+    /* ASCII HANDS */
+    .hands{
+      position:absolute;
+      left:0; right:0; bottom:18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      padding:0 30px;              /* 너무 끝으로 안 붙게 */
+      pointer-events:none;
+      opacity:0;
+      transition:opacity .2s ease;
+      z-index:6;
+    }
+    .hand{
+      font-size:14px; line-height:1.0; white-space:pre;
+      color:#fdfdfd;
+      text-shadow:0 0 2px rgba(0,0,0,0.9),0 0 10px rgba(255,255,255,0.10);
+      opacity:.95;
+      transform:none;
+    }
+    #rightHand{ transform:none; }
+
+    .toast{
+      position:absolute;left:14px;bottom:12px;font-size:9px;letter-spacing:.12em;
+      text-transform:uppercase;color:#fff;background:rgba(255,255,255,0.08);
+      padding:6px 8px;border:1px solid rgba(255,255,255,0.35);
+      opacity:0;transform:translateY(6px);
+      transition:opacity .2s ease, transform .2s ease;
+      pointer-events:none;
+      z-index:10;
+    }
+    .toast.show{opacity:1;transform:translateY(0);}
+
+    /* PATTERN PANEL */
+    .panel{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:min(420px, 86vw);
+      border:2px solid #000;background:#fff;color:#000;
+      padding:10px;z-index:30;display:none;
+      box-shadow:0 8px 28px rgba(0,0,0,0.35);
+    }
+    .panel-title{font-size:11px;letter-spacing:.16em;text-transform:uppercase;}
+    .panel-sub{margin-top:6px;font-size:9px;line-height:1.4;opacity:.85;}
+    .panel-grid{margin-top:10px;display:grid;grid-template-columns:1fr;gap:6px;}
+    .panel button{
+      width:100%;text-align:left;
+      font-size:10px;padding:8px 10px;border:1px solid #000;background:#fff;color:#000;
+      letter-spacing:.08em;cursor:pointer;
+    }
+    .panel button:hover{background:#000;color:#fff;}
+    .panel .row{display:flex;gap:8px;margin-top:10px;justify-content:flex-end;}
+    .panel .closeBtn{
+      font-size:9px;padding:6px 10px;border:1px solid #000;background:#fff;color:#000;cursor:pointer;
+      text-transform:uppercase;letter-spacing:.12em;
+    }
+    .panel .closeBtn:hover{background:#000;color:#fff;}
+  </style>
+</head>
+<body>
+
+  <template id="loomFrame0">
+                 ______________________________________________________
+                /______________________________________________________/|
+               /______________________________________________________/ |
+              |   WARP BEAM (warp threads)          HEDDLES            | |
+              |   ||||||||||||||||||||||||||||||||||||||||            | |
+              |   ||||||||||||||||||||||||||||||||||||||||            | |
+              |                                                        | |
+              |        _________      _________       _________        | |
+              |       /  ___   /|    /  ___   /|     /  ___   /|       | |
+              |      /__/__/__/ |   /__/__/__/ |    /__/__/__/ |       | |
+              |      |  SHUTTLE |   |  REED   |     |  BEATER |        | |
+              |      |__________|   |_________|     |_________|        | |
+              |                                                        | |
+              |    TREADLES:   [__]    [__]    [__]    [__]            | |
+              |________________________________________________________|/
+                         |                     |
+                         |_____________________|
+                                           \\
+                                            \\___________________________
+                                             \\                          \\
+                                              \\   DRIVE WHEEL (spindle)  \\
+                                               \\            ______        \\
+                                                \\         .-´      `-.     \\
+                                                 \\      .'    .--.    `.    \\
+                                                  \\    /    .'    `.    \\    \\
+                                                   \\  |    |  ()  |     |    |
+                                                    \\ |     `.____.'     |    |
+                                                     \\ \\                /    /
+                                                      \\ `.            .'    /
+                                                       \\  `-._    _.-'     /
+                                                        \\      `''        /
+                                                         \\_______________/
+  </template>
+
+  <template id="loomFrame1">
+                 ______________________________________________________
+                /______________________________________________________/|
+               /______________________________________________________/ |
+              |   WARP BEAM (warp threads)          HEDDLES            | |
+              |   ||||||||||||||||||||||||||||||||||||||||            | |
+              |   ||||||||||||||||||||||||||||||||||||||||            | |
+              |                                                        | |
+              |        _________      _________       _________        | |
+              |       /  ___   /|    /  ___   /|     /  ___   /|       | |
+              |      /__/__/__/ |   /__/__/__/ |    /__/__/__/ |       | |
+              |      |  SHUTTLE |   |  REED   |     |  BEATER |        | |
+              |      |__________|   |_________|     |_________|        | |
+              |                                                        | |
+              |    TREADLES:   [__]    [__]    [__]    [__]            | |
+              |________________________________________________________|/
+                         |                     |
+                         |_____________________|
+                                           \\
+                                            \\___________________________
+                                             \\                          \\
+                                              \\   DRIVE WHEEL (spindle)  \\
+                                               \\            ______        \\
+                                                \\         .-´      `-.     \\
+                                                 \\      .'   .----.   `.    \\
+                                                  \\    /   .'  ()  `.   \\    \\
+                                                   \\  |   |   __    |    |   |
+                                                    \\ |   |  (__)   |    |   |
+                                                     \\ \\   `.____.' /    /   /
+                                                      \\ `.          .'   /   /
+                                                       \\  `-._  _.-'    /   /
+                                                        \\      ``      /   /
+                                                         \\____________/___/
+  </template>
+
+  <div class="hud">
+    <div class="hud-left">
+      <div class="hud-title">OFFICE A-201 / TEXTILE RECORDING LOOM</div>
+      <div class="hud-status" id="statusLine">READY – SYNC IMAGES TO START</div>
+    </div>
+    <div class="hud-right">
+      <button id="syncBtn">SYNC IMAGES</button>
+      <button id="exportBtn" disabled>EXPORT PNG</button>
+      <input type="file" id="fileInput" accept="image/*" multiple />
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="loomCanvas"></canvas>
+
+    <div class="intro show" id="intro">
+      <pre id="loomAscii"></pre>
+    </div>
+
+    <div class="hands" id="hands">
+      <div class="hand" id="leftHand"></div>
+      <div class="hand" id="rightHand"></div>
+    </div>
+
+    <div class="toast" id="toast">WEAVING COMPLETE — CHOOSE A KNIT PATTERN</div>
+
+    <div class="panel" id="patternPanel">
+      <div class="panel-title">KNITTING PATTERN</div>
+      <div class="panel-sub">완성된 직물을 어떤 스웨터 짜임으로 캐스팅오프할지 고릅니다.</div>
+      <div class="panel-grid">
+        <button data-pattern="plain">PLAIN STOCKING / 기본 니트</button>
+        <button data-pattern="rib">1×1 RIB / 골지</button>
+        <button data-pattern="cable">CABLE / 꽈배기</button>
+        <button data-pattern="seed">SEED STITCH / 씨앗(뽀글) 조직</button>
+        <button data-pattern="checker">CHECKER / 체커(격자) 조직</button>
+      </div>
+      <div class="row">
+        <button class="closeBtn" id="closePanel" type="button">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      console.log("[BOOT] DOMContentLoaded OK");
+    });
+
+    const syncBtn   = document.getElementById("syncBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const fileInput = document.getElementById("fileInput");
+    const statusLine= document.getElementById("statusLine");
+    const toast     = document.getElementById("toast");
+
+    const patternPanel = document.getElementById("patternPanel");
+    const closePanelBtn= document.getElementById("closePanel");
+
+    const handsEl   = document.getElementById("hands");
+    const leftHandEl= document.getElementById("leftHand");
+    const rightHandEl=document.getElementById("rightHand");
+
+    const introEl   = document.getElementById("intro");
+    const loomAsciiEl = document.getElementById("loomAscii");
+
+    const canvas = document.getElementById("loomCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+
+    const WEFT_ROWS = 92;
+    const WARP_COLS = 140;
+    const ROW_INTERVAL = 72;
+
+    const COL_STEP  = 2;      // ✅ 이미지 날실은 조금 더 촘촘하게
+    const imageThreads = [];  // ✅ 업로드 이미지(씨실/날실 공용)
+
+    // ✅ ASCII를 template에서 읽기
+    function tplText(id){
+      const t = document.getElementById(id);
+      return (t && t.content) ? (t.content.textContent || "") : "";
+    }
+    const LOOM_FRAMES = [tplText("loomFrame0"), tplText("loomFrame1")];
+
+    let loomFrameIdx = 0;
+    let lastLoomTime = 0;
+    const LOOM_INTERVAL = 220;
+
+    function updateIntroLoom(now){
+      if(!imageThreads.length){
+        introEl.classList.add("show");
+        if(now - lastLoomTime > LOOM_INTERVAL){
+          loomFrameIdx = (loomFrameIdx+1) % LOOM_FRAMES.length;
+          loomAsciiEl.textContent = LOOM_FRAMES[loomFrameIdx];
+          lastLoomTime = now;
+        }
+      }else{
+        introEl.classList.remove("show");
+      }
+    }
+
+    // layout
+    let width=0,height=0;
+    let clothRect = {x:0,y:0,w:0,h:0};
+
+    const clothLayer = document.createElement("canvas");
+    const clothCtx   = clothLayer.getContext("2d");
+
+    const overlayLayer = document.createElement("canvas");
+    const overlayCtx   = overlayLayer.getContext("2d");
+    let dirtyOverlay = true;
+
+    const patternLayer = document.createElement("canvas");
+    const patternCtx   = patternLayer.getContext("2d");
+    let dirtyPattern = true;
+
+    let patternMode = "plain";
+
+    function layoutClothRect(){
+      const pad = 18*dpr;
+      const availW = width  - pad*2;
+      const availH = height - pad*2;
+
+      const maxW = Math.floor(availW * 0.86);
+      const targetAR = 1.85;
+
+      let w = Math.min(availW, maxW);
+      let h = Math.floor(w / targetAR);
+
+      if(h > availH){
+        h = availH;
+        w = Math.floor(h * targetAR);
+      }
+
+      clothRect = {
+        x: Math.floor(width/2 - w/2),
+        y: Math.floor(height/2 - h/2),
+        w: Math.floor(w),
+        h: Math.floor(h)
+      };
+    }
+
+    function resetLayers(){
+      clothCtx.clearRect(0,0,width,height);
+      overlayCtx.clearRect(0,0,width,height);
+      patternCtx.clearRect(0,0,width,height);
+      dirtyOverlay = true;
+      dirtyPattern = true;
+    }
+
+    function resizeCanvas(){
+      const rect = document.getElementById("stage").getBoundingClientRect();
+      canvas.width  = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      canvas.style.width  = rect.width + "px";
+      canvas.style.height = rect.height + "px";
+      width = canvas.width; height = canvas.height;
+
+      clothLayer.width = width; clothLayer.height = height;
+      overlayLayer.width = width; overlayLayer.height = height;
+      patternLayer.width = width; patternLayer.height = height;
+
+      layoutClothRect();
+      resetLayers();
+    }
+    window.addEventListener("resize", resizeCanvas);
+
+    /* =========================
+       WEFT (씨실) = 이미지 슬라이스 (기존 유지)
+    ========================= */
+    function getWeftSlice(rowIndex){
+      if(!imageThreads.length) return null;
+      const thread = imageThreads[rowIndex % imageThreads.length];
+      if(!thread.img || !thread.img.complete || !thread.img.naturalWidth) return null;
+      const img = thread.img;
+      const sy = Math.floor((rowIndex / WEFT_ROWS) * img.height);
+      return {img, sy};
+    }
+
+    function drawOneWeftRow(r, now){
+      const rowH = clothRect.h / WEFT_ROWS;
+      const y = clothRect.y + clothRect.h - (r+1)*rowH;
+      const slice = getWeftSlice(r);
+      const colW = clothRect.w / WARP_COLS;
+
+      const wobX =
+        Math.sin((r*0.22) + now*0.004) * (colW*2.0) +
+        Math.sin((r*0.06) + now*0.010) * (colW*0.9);
+
+      const x = clothRect.x + wobX;
+
+      clothCtx.save();
+      clothCtx.beginPath();
+      clothCtx.rect(clothRect.x, clothRect.y, clothRect.w, clothRect.h);
+      clothCtx.clip();
+
+      if(slice){
+        clothCtx.drawImage(slice.img, 0, slice.sy, slice.img.width, 1, x, y, clothRect.w, rowH);
+        if(wobX>0) clothCtx.drawImage(slice.img, 0, slice.sy, slice.img.width, 1, x-clothRect.w, y, clothRect.w, rowH);
+        if(wobX<0) clothCtx.drawImage(slice.img, 0, slice.sy, slice.img.width, 1, x+clothRect.w, y, clothRect.w, rowH);
+      }else{
+        clothCtx.fillStyle="rgba(255,255,255,0.05)";
+        clothCtx.fillRect(clothRect.x, y, clothRect.w, rowH);
+      }
+      clothCtx.restore();
+    }
+
+    /* =========================
+       WARP (날실) = 이미지 세로 스트립 (텍스트 제거 버전)
+       - overlayLayer에 "세로 이미지 스트립"을 흔들며 덮는다
+       - 씨실과 다른 이미지를 섞기 위해 index offset 사용
+    ========================= */
+    function getWarpSlice(colIndex){
+      if(!imageThreads.length) return null;
+
+      // ✅ 씨실과 다르게 섞이도록 오프셋(반 정도) 준 인덱스
+      const offset = Math.max(1, Math.floor(imageThreads.length * 0.5));
+      const thread = imageThreads[(colIndex + offset) % imageThreads.length];
+
+      if(!thread.img || !thread.img.complete || !thread.img.naturalWidth) return null;
+      const img = thread.img;
+
+      const sx = Math.floor((colIndex / WARP_COLS) * img.width);
+      return {img, sx};
+    }
+
+    function rebuildOverlay(now){
+      overlayCtx.clearRect(0,0,width,height);
+      const colW = clothRect.w / WARP_COLS;
+
+      overlayCtx.save();
+      overlayCtx.beginPath();
+      overlayCtx.rect(clothRect.x, clothRect.y, clothRect.w, clothRect.h);
+      overlayCtx.clip();
+
+      // ✅ "이미지끼리 엮이는" 느낌: overlay + multiply를 섞어줌
+      // 너무 그래픽화되지 않게, 존재감은 확실히.
+      for(let c=0;c<WARP_COLS;c+=COL_STEP){
+        const slice = getWarpSlice(c);
+        if(!slice) continue;
+
+        const baseX = clothRect.x + (c+0.5)*colW;
+
+        // 세로 스트립 흔들림
+        const wob =
+          Math.sin((c*0.16) + now*0.003) * (colW*1.6) +
+          Math.sin((c*0.05) + now*0.009) * (colW*0.8);
+
+        const x = baseX + wob;
+
+        // (A) 스트립 베이스(조금 더 강하게 보이도록)
+        overlayCtx.save();
+        overlayCtx.globalCompositeOperation = "overlay";
+        overlayCtx.globalAlpha = 0.22;
+        overlayCtx.drawImage(
+          slice.img,
+          slice.sx, 0, 1, slice.img.height,     // 1px 세로 슬라이스
+          x - colW*0.45, clothRect.y,
+          colW*0.95, clothRect.h
+        );
+        overlayCtx.restore();
+
+        // (B) 깊이감(실이 위로 얹히는 듯한 음영)
+        overlayCtx.save();
+        overlayCtx.globalCompositeOperation = "multiply";
+        overlayCtx.globalAlpha = 0.10;
+        overlayCtx.drawImage(
+          slice.img,
+          slice.sx, 0, 1, slice.img.height,
+          x - colW*0.35, clothRect.y,
+          colW*0.70, clothRect.h
+        );
+        overlayCtx.restore();
+
+        // (C) 하이라이트 실(가느다란 광택)
+        overlayCtx.save();
+        overlayCtx.globalCompositeOperation = "screen";
+        overlayCtx.globalAlpha = 0.07;
+        overlayCtx.drawImage(
+          slice.img,
+          slice.sx, 0, 1, slice.img.height,
+          x - colW*0.10, clothRect.y,
+          Math.max(1.2, colW*0.18), clothRect.h
+        );
+        overlayCtx.restore();
+      }
+
+      overlayCtx.restore();
+      dirtyOverlay = false;
+    }
+
+    function applySeedStrong(o, rx, ry, rw, rh){
+      const cell = Math.max(18, Math.floor(rw/22));
+      o.save();
+      o.beginPath(); o.rect(rx,ry,rw,rh); o.clip();
+
+      o.globalCompositeOperation="multiply";
+      for(let y=ry; y<ry+rh; y+=cell){
+        for(let x=rx; x<rx+rw; x+=cell){
+          const r = (Math.sin((x+y)*0.018)*0.5+0.5);
+          const ox = (r-0.5)*cell*0.18;
+          const oy = (0.5-r)*cell*0.18;
+          o.fillStyle = `rgba(0,0,0,${0.20 + (1-r)*0.24})`;
+          o.beginPath();
+          o.ellipse(x+cell*0.56+ox, y+cell*0.58+oy, cell*0.28, cell*0.20, 0, 0, Math.PI*2);
+          o.fill();
+        }
+      }
+
+      o.globalCompositeOperation="screen";
+      for(let y=ry; y<ry+rh; y+=cell){
+        for(let x=rx; x<rx+rw; x+=cell){
+          const r = (Math.sin((x-y)*0.017)*0.5+0.5);
+          const ox = (0.5-r)*cell*0.18;
+          const oy = (r-0.5)*cell*0.18;
+          o.fillStyle = `rgba(255,255,255,${0.16 + r*0.26})`;
+          o.beginPath();
+          o.ellipse(x+cell*0.44+ox, y+cell*0.42+oy, cell*0.22, cell*0.16, 0, 0, Math.PI*2);
+          o.fill();
+        }
+      }
+
+      o.globalCompositeOperation="overlay";
+      const dots = Math.floor((rw*rh) / (cell*cell) * 60);
+      for(let i=0;i<dots;i++){
+        const x = rx + Math.random()*rw;
+        const y = ry + Math.random()*rh;
+        const a = 0.03 + Math.random()*0.07;
+        o.fillStyle = Math.random()>0.5 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+        o.fillRect(x,y,1,1);
+      }
+
+      o.globalCompositeOperation="source-over";
+      o.restore();
+    }
+
+    function rebuildPatternCache(){
+      patternCtx.clearRect(0,0,width,height);
+      if(patternMode==="plain") { dirtyPattern=false; return; }
+
+      patternCtx.drawImage(clothLayer,0,0);
+      patternCtx.drawImage(overlayLayer,0,0);
+
+      const rx = clothRect.x, ry = clothRect.y, rw = clothRect.w, rh = clothRect.h;
+
+      patternCtx.save();
+      patternCtx.beginPath(); patternCtx.rect(rx,ry,rw,rh); patternCtx.clip();
+
+      if(patternMode==="rib"){
+        patternCtx.globalCompositeOperation="multiply";
+        const bands = 18;
+        const bw = rw/bands;
+        for(let i=0;i<bands;i++){
+          const x = rx + i*bw;
+          const g = patternCtx.createLinearGradient(x,ry,x+bw,ry);
+          g.addColorStop(0.0,"rgba(0,0,0,0.72)");
+          g.addColorStop(0.35,"rgba(0,0,0,0.12)");
+          g.addColorStop(0.50,"rgba(255,255,255,0.18)");
+          g.addColorStop(0.65,"rgba(0,0,0,0.14)");
+          g.addColorStop(1.0,"rgba(0,0,0,0.72)");
+          patternCtx.fillStyle=g; patternCtx.fillRect(x,ry,bw,rh);
+        }
+        patternCtx.globalCompositeOperation="source-over";
+      }
+
+      if(patternMode==="cable"){
+        const cols = 6;
+        const span = rw / cols;
+
+        patternCtx.save();
+        patternCtx.globalCompositeOperation = "overlay";
+        patternCtx.fillStyle = "rgba(255,255,255,0.06)";
+        patternCtx.fillRect(rx, ry, rw, rh);
+        patternCtx.restore();
+
+        for(let i=0;i<cols;i++){
+          const cx = rx + (i+0.5)*span;
+
+          const ribW  = span * 0.30;
+          const amp   = span * 0.17;
+          const step  = Math.max(7, Math.floor(rh/160));
+          const phase = i * 0.60;
+
+          patternCtx.save();
+          patternCtx.globalCompositeOperation = "multiply";
+          patternCtx.fillStyle = "rgba(0,0,0,0.14)";
+          for(let y=ry; y<ry+rh; y+=step){
+            const t  = (y-ry)/rh;
+            const s  = Math.sin(t*Math.PI*2 + phase);
+            const x  = cx + s*amp;
+            patternCtx.fillRect(x - ribW*0.52, y, ribW*0.12, step+1);
+            patternCtx.fillRect(x + ribW*0.40, y, ribW*0.12, step+1);
+          }
+          patternCtx.restore();
+
+          patternCtx.save();
+          patternCtx.globalCompositeOperation = "overlay";
+          for(let y=ry; y<ry+rh; y+=step){
+            const t  = (y-ry)/rh;
+            const s  = Math.sin(t*Math.PI*2 + phase);
+            const x  = cx + s*amp;
+
+            const g = patternCtx.createLinearGradient(x - ribW*0.55, 0, x + ribW*0.55, 0);
+            g.addColorStop(0.0, "rgba(0,0,0,0.08)");
+            g.addColorStop(0.48,"rgba(255,255,255,0.22)");
+            g.addColorStop(0.52,"rgba(255,255,255,0.22)");
+            g.addColorStop(1.0, "rgba(0,0,0,0.08)");
+
+            patternCtx.fillStyle = g;
+            patternCtx.fillRect(x - ribW/2, y, ribW, step+1);
+          }
+          patternCtx.restore();
+
+          patternCtx.save();
+          patternCtx.globalCompositeOperation="screen";
+          patternCtx.strokeStyle="rgba(255,255,255,0.14)";
+          patternCtx.lineWidth=Math.max(1.2, span*0.05);
+          patternCtx.beginPath();
+          for(let t=0;t<=1.001;t+=0.02){
+            const yy = ry + t*rh;
+            const s  = Math.sin(t*Math.PI*2 + phase + Math.PI/2);
+            const xx = cx + s*(amp*0.62);
+            if(t===0) patternCtx.moveTo(xx,yy); else patternCtx.lineTo(xx,yy);
+          }
+          patternCtx.stroke();
+          patternCtx.restore();
+        }
+      }
+
+      if(patternMode==="seed"){
+        applySeedStrong(patternCtx, rx, ry, rw, rh);
+      }
+
+      if(patternMode==="checker"){
+        const cell = Math.max(26, Math.floor(rw/14));
+        for(let y=ry; y<ry+rh; y+=cell){
+          for(let x=rx; x<rx+rw; x+=cell){
+            const on = ((Math.floor((x-rx)/cell)+Math.floor((y-ry)/cell))%2)===0;
+
+            patternCtx.globalCompositeOperation="overlay";
+            patternCtx.fillStyle = on
+              ? "rgba(74,68,62,0.34)"
+              : "rgba(255,255,255,0.12)";
+            patternCtx.fillRect(x,y,cell,cell);
+
+            patternCtx.globalCompositeOperation="screen";
+            patternCtx.fillStyle = on
+              ? "rgba(255,255,255,0.18)"
+              : "rgba(255,255,255,0.09)";
+            patternCtx.fillRect(x+2,y+2,cell-4,cell-4);
+
+            patternCtx.globalCompositeOperation="multiply";
+            patternCtx.strokeStyle = "rgba(0,0,0,0.18)";
+            patternCtx.lineWidth = 1;
+            patternCtx.strokeRect(x+0.5,y+0.5,cell-1,cell-1);
+          }
+        }
+        patternCtx.globalCompositeOperation="source-over";
+      }
+
+      patternCtx.restore();
+      dirtyPattern = false;
+    }
+
+    const LEFT_FRAMES = [
+`  __      __
+ /  \\____/  \\
+|  (  __  )  |
+|   \\____/   |
+ \\___/||\\____/
+     /  \\`,
+`  __      __
+ /  \\____/  \\
+|  ( •• )   |
+|   \\__/    |
+ \\___/||\\____/
+    _/  \\`,
+`  __      __
+ /  \\____/  \\
+|   (••)    |
+|   /__/    |
+ \\__/||\\_____
+    /  \\_`
+    ];
+    const RIGHT_FRAMES = [
+` __      __
+/  \\____/  \\
+|  (  __  ) |
+|   \\____/  |
+\\____/||\\___/
+     /  \\`,
+` __      __
+/  \\____/  \\
+|   (•• )  |
+|    \\__/  |
+\\____/||\\___/
+     /  \\_`,
+` __      __
+/  \\____/  \\
+|    (••)  |
+|    \\__\\  |
+\\_____/||\\__
+    _/  \\`
+    ];
+    let handIdx=0, lastHandTime=0;
+    const HAND_INTERVAL=140;
+
+    function updateHands(now){
+      if(now - lastHandTime > HAND_INTERVAL){
+        handIdx = (handIdx+1) % LEFT_FRAMES.length;
+        leftHandEl.textContent  = LEFT_FRAMES[handIdx];
+        rightHandEl.textContent = RIGHT_FRAMES[handIdx];
+        lastHandTime = now;
+      }
+      handsEl.style.opacity = imageThreads.length ? 1 : 0;
+    }
+
+    let weavingActive=false;
+    let weavingRow=0;
+    let lastWeaveTime=0;
+
+    function restartWeaving(){
+      weavingRow=0;
+      weavingActive=true;
+      exportBtn.disabled=true;
+      toast.classList.remove("show");
+      patternPanel.style.display="none";
+      resetLayers();
+      lastWeaveTime = performance.now();
+      requestAnimationFrame(weavingStepper);
+    }
+
+    function weavingStepper(now){
+      if(!weavingActive) return;
+
+      if(weavingRow < WEFT_ROWS){
+        if(now - lastWeaveTime > ROW_INTERVAL){
+          drawOneWeftRow(weavingRow, now);
+          weavingRow++;
+          lastWeaveTime = now;
+
+          // ✅ 날실 이미지 오버레이도 계속 살아있게
+          if(weavingRow % 4 === 0) dirtyOverlay = true;
+        }
+        requestAnimationFrame(weavingStepper);
+      }else{
+        weavingActive=false;
+        exportBtn.disabled=false;
+        toast.classList.add("show");
+        patternPanel.style.display="block";
+        dirtyPattern = true;
+        setTimeout(()=>toast.classList.remove("show"), 2200);
+      }
+    }
+
+    function draw(now){
+      ctx.fillStyle="#000";
+      ctx.fillRect(0,0,width,height);
+
+      updateIntroLoom(now);
+
+      if(imageThreads.length){
+        if(dirtyOverlay) rebuildOverlay(now);
+
+        ctx.drawImage(clothLayer,0,0);
+        ctx.drawImage(overlayLayer,0,0);
+
+        if(weavingRow < WEFT_ROWS){
+          const rowH = clothRect.h / WEFT_ROWS;
+          const hMask = clothRect.h - weavingRow*rowH;
+          ctx.fillStyle="rgba(0,0,0,0.60)";
+          ctx.fillRect(clothRect.x, clothRect.y, clothRect.w, hMask);
+        }
+
+        if(weavingRow >= WEFT_ROWS && patternMode !== "plain"){
+          if(dirtyPattern) rebuildPatternCache();
+          ctx.clearRect(0,0,width,height);
+          ctx.drawImage(patternLayer,0,0);
+        }
+
+        const pct = Math.round((weavingRow/WEFT_ROWS)*100);
+        statusLine.textContent = (weavingRow>=WEFT_ROWS)
+          ? "WEAVING COMPLETE — SELECT PATTERN / EXPORT READY"
+          : `WEAVING — ${pct}%`;
+      }else{
+        statusLine.textContent="READY – SYNC IMAGES TO START";
+      }
+
+      updateHands(now);
+      requestAnimationFrame(draw);
+    }
+
+    patternPanel.addEventListener("click",(e)=>{
+      const btn = e.target.closest("button");
+      if(!btn) return;
+      const p = btn.dataset.pattern;
+      if(!p) return;
+      patternMode = p;
+      dirtyPattern = true;
+    });
+
+    closePanelBtn.addEventListener("click",(e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      patternPanel.style.display="none";
+    });
+
+    document.addEventListener("keydown",(e)=>{
+      if(e.key==="Escape") patternPanel.style.display="none";
+    });
+
+    exportBtn.addEventListener("click", ()=>{
+      const out = document.createElement("canvas");
+      out.width  = Math.floor(clothRect.w);
+      out.height = Math.floor(clothRect.h);
+      const octx = out.getContext("2d");
+
+      octx.drawImage(clothLayer, clothRect.x, clothRect.y, clothRect.w, clothRect.h, 0,0, clothRect.w, clothRect.h);
+      octx.drawImage(overlayLayer, clothRect.x, clothRect.y, clothRect.w, clothRect.h, 0,0, clothRect.w, clothRect.h);
+
+      const rx=0, ry=0, rw=out.width, rh=out.height;
+
+      if(patternMode !== "plain"){
+        if(patternMode==="seed") applySeedStrong(octx, rx,ry,rw,rh);
+
+        if(patternMode==="rib"){
+          octx.save();
+          octx.globalCompositeOperation="multiply";
+          const bands = 18, bw = rw/bands;
+          for(let i=0;i<bands;i++){
+            const x = i*bw;
+            const g = octx.createLinearGradient(x,0,x+bw,0);
+            g.addColorStop(0.0,"rgba(0,0,0,0.72)");
+            g.addColorStop(0.35,"rgba(0,0,0,0.12)");
+            g.addColorStop(0.50,"rgba(255,255,255,0.18)");
+            g.addColorStop(0.65,"rgba(0,0,0,0.14)");
+            g.addColorStop(1.0,"rgba(0,0,0,0.72)");
+            octx.fillStyle=g; octx.fillRect(x,0,bw,rh);
+          }
+          octx.restore();
+        }
+
+        if(patternMode==="cable"){
+          const cols = 6;
+          const span = rw / cols;
+
+          octx.save();
+          octx.globalCompositeOperation = "overlay";
+          octx.fillStyle = "rgba(255,255,255,0.06)";
+          octx.fillRect(rx, ry, rw, rh);
+          octx.restore();
+
+          for(let i=0;i<cols;i++){
+            const cx = (i+0.5)*span;
+
+            const ribW  = span * 0.30;
+            const amp   = span * 0.17;
+            const step  = Math.max(7, Math.floor(rh/160));
+            const phase = i * 0.60;
+
+            octx.save();
+            octx.globalCompositeOperation = "multiply";
+            octx.fillStyle = "rgba(0,0,0,0.14)";
+            for(let y=0; y<rh; y+=step){
+              const t  = y/rh;
+              const s  = Math.sin(t*Math.PI*2 + phase);
+              const x  = cx + s*amp;
+              octx.fillRect(x - ribW*0.52, y, ribW*0.12, step+1);
+              octx.fillRect(x + ribW*0.40, y, ribW*0.12, step+1);
+            }
+            octx.restore();
+
+            octx.save();
+            octx.globalCompositeOperation = "overlay";
+            for(let y=0; y<rh; y+=step){
+              const t  = y/rh;
+              const s  = Math.sin(t*Math.PI*2 + phase);
+              const x  = cx + s*amp;
+
+              const g = octx.createLinearGradient(x - ribW*0.55, 0, x + ribW*0.55, 0);
+              g.addColorStop(0.0, "rgba(0,0,0,0.08)");
+              g.addColorStop(0.48,"rgba(255,255,255,0.22)");
+              g.addColorStop(0.52,"rgba(255,255,255,0.22)");
+              g.addColorStop(1.0, "rgba(0,0,0,0.08)");
+
+              octx.fillStyle = g;
+              octx.fillRect(x - ribW/2, y, ribW, step+1);
+            }
+            octx.restore();
+
+            octx.save();
+            octx.globalCompositeOperation="screen";
+            octx.strokeStyle="rgba(255,255,255,0.14)";
+            octx.lineWidth=Math.max(1.2, span*0.05);
+            octx.beginPath();
+            for(let t=0;t<=1.001;t+=0.02){
+              const yy = t*rh;
+              const s  = Math.sin(t*Math.PI*2 + phase + Math.PI/2);
+              const xx = cx + s*(amp*0.62);
+              if(t===0) octx.moveTo(xx,yy); else octx.lineTo(xx,yy);
+            }
+            octx.stroke();
+            octx.restore();
+          }
+        }
+
+        if(patternMode==="checker"){
+          const cell = Math.max(26, Math.floor(rw/14));
+          for(let y=0; y<rh; y+=cell){
+            for(let x=0; x<rw; x+=cell){
+              const on = ((Math.floor(x/cell)+Math.floor(y/cell))%2)===0;
+
+              octx.globalCompositeOperation="overlay";
+              octx.fillStyle = on
+                ? "rgba(74,68,62,0.34)"
+                : "rgba(255,255,255,0.12)";
+              octx.fillRect(x,y,cell,cell);
+
+              octx.globalCompositeOperation="screen";
+              octx.fillStyle = on
+                ? "rgba(255,255,255,0.18)"
+                : "rgba(255,255,255,0.09)";
+              octx.fillRect(x+2,y+2,cell-4,cell-4);
+
+              octx.globalCompositeOperation="multiply";
+              octx.strokeStyle="rgba(0,0,0,0.18)";
+              octx.lineWidth=1;
+              octx.strokeRect(x+0.5,y+0.5,cell-1,cell-1);
+            }
+          }
+          octx.globalCompositeOperation="source-over";
+        }
+      }
+
+      const a = document.createElement("a");
+      a.download = "textile_weave.png";
+      a.href = out.toDataURL("image/png");
+      a.click();
+    });
+
+    syncBtn.addEventListener("click", ()=> fileInput.click());
+
+    fileInput.addEventListener("change", ()=>{
+      const files = Array.from(fileInput.files || []);
+      if(!files.length) return;
+
+      imageThreads.length = 0;
+      patternMode = "plain";
+      exportBtn.disabled = true;
+
+      let loaded=0;
+      files.forEach((file)=>{
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = ()=>{
+          loaded++;
+          if(loaded===files.length) restartWeaving();
+        };
+        img.onerror = ()=>{
+          alert("이미지 로드 실패: " + file.name);
+        };
+        img.src = url;
+        imageThreads.push({img,url,name:file.name});
+      });
+    });
+
+    window.addEventListener("load", ()=>{
+      resizeCanvas();
+
+      leftHandEl.textContent  = LEFT_FRAMES[0];
+      rightHandEl.textContent = RIGHT_FRAMES[0];
+
+      loomAsciiEl.textContent = LOOM_FRAMES[0] || "(LOOM ASCII MISSING)";
+      introEl.classList.add("show");
+
+      lastHandTime = performance.now();
+      lastLoomTime = performance.now();
+
+      requestAnimationFrame(draw);
+    });
+  </script>
+</body>
+</html>
